@@ -1,34 +1,32 @@
 #!/bin/bash
 #
-## macOS Dark Mode at sunset
+## Dark wallpaper at sunset, light at sunrise
 ## Solar times pulled from Yahoo Weather API
-## Author: katernet ## Version 1.6
+## Dark Paper author: peterwooley
+## Original Darkmode Author: katernet
 
 ## Global variables ##
-darkdir=~/Library/Application\ Support/darkmode # darkmode directory
-plistR=~/Library/LaunchAgents/io.github.katernet.darkmode.sunrise.plist # Launch Agent plist locations
-plistS=~/Library/LaunchAgents/io.github.katernet.darkmode.sunset.plist
+darkdir=~/Library/Application\ Support/darkpaper # darkpaper directory
+plistR=~/Library/LaunchAgents/io.github.peterwooley.darkpaper.sunrise.plist # Launch Agent plist locations
+plistS=~/Library/LaunchAgents/io.github.peterwooley.darkpaper.sunset.plist
 
 ## Functions ##
 
-# Set dark mode - Sunrise = off Sunset = on
-darkMode() {
+# Set dark paper - Sunrise = off Sunset = on
+darkpaper() {
 	case $1 in
 		off) 
-			# Disable dark mode
+			# Set sunrise wallpaper
+
 			osascript -e '
-			tell application id "com.apple.systemevents"
-				tell appearance preferences
-					if dark mode is true then
-						set dark mode to false
-					end if
-				end tell
-			end tell
+      tell application "System Events"
+        tell current desktop
+          set picture to "~/Pictures/sunrise-wallpaper.jpg"
+        end tell
+      end tell
 			'
-			if ls /Applications/Alfred*.app >/dev/null 2>&1; then # If Alfred installed
-				osascript -e 'tell application "Alfred 3" to set theme "Alfred"' 2> /dev/null # Set Alfred default theme
-			fi
-			if [ -f "$plistR" ] || [ -f "$plistS" ]; then # Prevent uninstaller from continuing
+
+      if [ -f "$plistR" ] || [ -f "$plistS" ]; then # Prevent uninstaller from continuing
 				# Get sunset launch agent start interval time
 				plistSH=$(/usr/libexec/PlistBuddy -c "Print :StartCalendarInterval:Hour" "$plistS" 2> /dev/null)
 				plistSM=$(/usr/libexec/PlistBuddy -c "Print :StartCalendarInterval:Minute" "$plistS" 2> /dev/null)
@@ -44,20 +42,15 @@ darkMode() {
 			fi
 			;;
 		on)
-			# Enable dark mode
+			# Set sunset wallpaper
 			osascript -e '
-			tell application id "com.apple.systemevents"
-				tell appearance preferences
-					if dark mode is false then
-						set dark mode to true
-					end if
-				end tell
-			end tell
+      tell application "System Events"
+        tell current desktop
+          set picture to "~/Pictures/sunset-wallpaper.jpg"
+        end tell
+      end tell
 			'
-			if ls /Applications/Alfred*.app >/dev/null 2>&1; then
-				osascript -e 'tell application "Alfred 3" to set theme "Alfred Dark"' 2> /dev/null # Set Alfred dark theme
-			fi
-			# Get sunrise launch agent start interval
+      # Get sunrise launch agent start interval
 			plistRH=$(/usr/libexec/PlistBuddy -c "Print :StartCalendarInterval:Hour" "$plistR" 2> /dev/null)
 			plistRM=$(/usr/libexec/PlistBuddy -c "Print :StartCalendarInterval:Minute" "$plistR" 2> /dev/null)
 			if [ -z "$plistRH" ] && [ -z "$plistRM" ]; then
@@ -89,19 +82,19 @@ solar() {
 	UPDATE solar SET time='$setT24' WHERE id=2;
 EOF
 	# Log
-	echo "$(date +"%d/%m/%y %T")" darkmode: Solar query stored - Sunrise: "$(sqlite3 "$darkdir"/solar.db 'SELECT time FROM solar WHERE id=1;' "")" Sunset: "$(sqlite3 "$darkdir"/solar.db 'SELECT time FROM solar WHERE id=2;' "")" >> ~/Library/Logs/io.github.katernet.darkmode.log
+	echo "$(date +"%d/%m/%y %T")" darkpaper: Solar query stored - Sunrise: "$(sqlite3 "$darkdir"/solar.db 'SELECT time FROM solar WHERE id=1;' "")" Sunset: "$(sqlite3 "$darkdir"/solar.db 'SELECT time FROM solar WHERE id=2;' "")" >> ~/Library/Logs/io.github.peterwooley.darkpaper.log
 }
 
 # Deploy launch agents
 launch() {
 	shdir="$(cd "$(dirname "$0")" && pwd)" # Get script path
-	cp -p "$shdir"/darkmode.sh "$darkdir"/ # Copy script to darkmode directory
+	cp -p "$shdir"/darkpaper.sh "$darkdir"/ # Copy script to darkpaper directory
 	mkdir ~/Library/LaunchAgents 2> /dev/null; cd "$_" || return # Create LaunchAgents directory (if required) and cd there
 	# Setup launch agent plists
-	/usr/libexec/PlistBuddy -c "Add :Label string io.github.katernet.darkmode.sunrise" "$plistR" 1> /dev/null
-	/usr/libexec/PlistBuddy -c "Add :Program string ${darkdir}/darkmode.sh" "$plistR"
-	/usr/libexec/PlistBuddy -c "Add :Label string io.github.katernet.darkmode.sunset" "$plistS" 1> /dev/null
-	/usr/libexec/PlistBuddy -c "Add :Program string ${darkdir}/darkmode.sh" "$plistS"
+	/usr/libexec/PlistBuddy -c "Add :Label string io.github.peterwooley.darkpaper.sunrise" "$plistR" 1> /dev/null
+	/usr/libexec/PlistBuddy -c "Add :Program string ${darkdir}/darkpaper.sh" "$plistR"
+	/usr/libexec/PlistBuddy -c "Add :Label string io.github.peterwooley.darkpaper.sunset" "$plistS" 1> /dev/null
+	/usr/libexec/PlistBuddy -c "Add :Program string ${darkdir}/darkpaper.sh" "$plistS"
 	# Load launch agents
 	launchctl load "$plistR"
 	launchctl load "$plistS"
@@ -134,7 +127,7 @@ unstl() {
 	# Unload launch agents
 	launchctl unload "$plistR"
 	launchctl unload "$plistS"
-	# Check if darkmode files exist and move to Trash
+	# Check if darkpaper files exist and move to Trash
 	if [ -d "$darkdir" ]; then
 		mv "$darkdir" ~/.Trash
 	fi
@@ -142,16 +135,16 @@ unstl() {
 		mv "$plistR" ~/.Trash
 		mv "$plistS" ~/.Trash
 	fi
-	if [ -f ~/Library/Logs/io.github.katernet.darkmode.log ]; then
-		mv ~/Library/Logs/io.github.katernet.darkmode.log ~/.Trash
+	if [ -f ~/Library/Logs/io.github.peterwooley.darkpaper.log ]; then
+		mv ~/Library/Logs/io.github.peterwooley.darkpaper.log ~/.Trash
 	fi
-	darkMode off
+	darkpaper off
 }
 
 # Error logging
 log() {
 	while IFS='' read -r line; do
-		echo "$(date +"%D %T") $line" >> ~/Library/Logs/io.github.katernet.darkmode.log
+		echo "$(date +"%D %T") $line" >> ~/Library/Logs/io.github.peterwooley.darkpaper.log
 	done
 }
 
@@ -165,17 +158,17 @@ if [ "$1" == '/u' ]; then # Shell parameter
 	unstl
 	error=$? # Get exit code from unstl()
 	if [ $error -ne 0 ]; then # If exit code not equal to 0
-		echo "Uninstall failed! For manual uninstall steps visit https://github.com/katernet/darkmode/issues/1"
+		echo "Uninstall failed! For manual uninstall steps visit https://github.com/peterwooley/darkpaper/issues/1"
 		read -rp "Open link in your browser? [y/n] " prompt
 		if [[ $prompt =~ [yY](es)* ]]; then
-			open https://github.com/katernet/darkmode/issues/1
+			open https://github.com//darkpaper/issues/1
 		fi
 		exit $error
 	fi
 	exit 0
 fi
 
-# Create darkmode directory if doesn't exist
+# Create darkpaper directory if doesn't exist
 if [ ! -d "$darkdir" ]; then
 	mkdir "$darkdir"
 	solar
@@ -202,18 +195,18 @@ timeM=$(date +"%M" | sed 's/^0//')
 if [[ "$timeH" -ge "$riseH" && "$timeH" -lt "$setH" ]]; then
 	# Sunrise
 	if [[ "$timeH" -ge $((riseH+1)) || "$timeM" -ge "$riseM" ]]; then
-		darkMode off
+		darkpaper off
 	# Sunset	
 	elif [[ "$timeH" -ge "$setH" && "$timeM" -ge "$setM" ]] || [[ "$timeH" -le "$riseH" && "$timeM" -lt "$riseM" ]]; then 
-		darkMode on
+		darkpaper on
 	fi
 # Sunset		
 elif [[ "$timeH" -ge 0 && "$timeH" -lt "$riseH" ]]; then
-	darkMode on
+	darkpaper on
 # Sunrise	
 elif [[ "$timeH" -eq "$setH" && "$timeM" -lt "$setM" ]]; then
-	darkMode off
+	darkpaper off
 # Sunset	
 else
-	darkMode on
+	darkpaper on
 fi
