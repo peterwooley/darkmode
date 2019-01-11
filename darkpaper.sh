@@ -26,7 +26,14 @@ darkpaper() {
       end tell
 			'
 
-      if [ -f "$plistR" ] || [ -f "$plistS" ]; then # Prevent uninstaller from continuing
+			if ls /Applications/Alfred*.app >/dev/null 2>&1; then # If Alfred installed
+				osascript -e 'tell application "Alfred 3" to set theme "Alfred"' 2> /dev/null # Set Alfred default theme
+			fi
+			if [ -f "$plistR" ] || [ -f "$plistS" ]; then # Prevent uninstaller from continuing
+				# Run solar query on first day of week
+				if [ "$(date +%u)" = 1 ]; then
+					solar
+				fi
 				# Get sunset launch agent start interval time
 				plistSH=$(/usr/libexec/PlistBuddy -c "Print :StartCalendarInterval:Hour" "$plistS" 2> /dev/null)
 				plistSM=$(/usr/libexec/PlistBuddy -c "Print :StartCalendarInterval:Minute" "$plistS" 2> /dev/null)
@@ -34,10 +41,6 @@ darkpaper() {
 					editPlist add "$setH" "$setM" "$plistS" # Run add solar time plist function
 				elif [[ "$plistSH" -ne "$setH" ]] || [[ "$plistSM" -ne "$setM" ]]; then # If launch agent times and solar times differ
 					editPlist update "$setH" "$setM" "$plistS" # Run update solar time plist function
-				fi
-				# Run solar query on first day of week
-				if [ "$(date +%u)" = 1 ]; then
-					solar
 				fi
 			fi
 			;;
@@ -64,22 +67,18 @@ darkpaper() {
 
 # Solar query
 solar() {
-	# Set location
-	# Get city and nation from http://ipinfo.io
-	loc=$(curl -s ipinfo.io/geo | awk -F: '{print $2}' | awk 'FNR ==3 {print}' | sed 's/[", ]//g')
-	nat=$(curl -s ipinfo.io/geo | awk -F: '{print $2}' | awk 'FNR ==5 {print}' | sed 's/[", ]//g')
-	# Get solar times
-	riseT=$(curl -s "https://query.yahooapis.com/v1/public/yql?q=select%20astronomy.sunrise%20from%20weather.forecast%20where%20woeid%20in%20(select%20woeid%20from%20geo.places(1)%20where%20text%3D%22${loc}%2C%20${nat}%22)&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys" | awk -F\" '{print $22}')
-	setT=$(curl -s "https://query.yahooapis.com/v1/public/yql?q=select%20astronomy.sunset%20from%20weather.forecast%20where%20woeid%20in%20(select%20woeid%20from%20geo.places(1)%20where%20text%3D%22${loc}%2C%20${nat}%22)&format=json&env=store%3A%2F%2Fdatatables.org%2Falltableswithkeys" | awk -F\" '{print $22}')
-	# Convert times to 24H
-	riseT24=$(date -jf "%I:%M %p" "${riseT}" +"%H:%M" 2> /dev/null)
-	setT24=$(date -jf "%I:%M %p" "${setT}" +"%H:%M" 2> /dev/null)
+	# Get Night Shift solar times (UTC)
+	riseT=$(/usr/bin/corebrightnessdiag nightshift-internal | grep nextSunrise | cut -d \" -f2)
+	setT=$(/usr/bin/corebrightnessdiag nightshift-internal | grep nextSunset | cut -d \" -f2)
+	# Convert to local time
+	riseTL=$(date -jf "%Y-%m-%d %H:%M:%S %z" "$riseT" +"%H:%M")
+	setTL=$(date -jf "%Y-%m-%d %H:%M:%S %z" "$setT" +"%H:%M")
 	# Store times in database
 	sqlite3 "$darkdir"/solar.db <<EOF
 	CREATE TABLE IF NOT EXISTS solar (id INTEGER PRIMARY KEY, time VARCHAR(5));
-	INSERT OR IGNORE INTO solar (id, time) VALUES (1, '$riseT24'), (2, '$setT24');
-	UPDATE solar SET time='$riseT24' WHERE id=1;
-	UPDATE solar SET time='$setT24' WHERE id=2;
+	INSERT OR IGNORE INTO solar (id, time) VALUES (1, '$riseTL'), (2, '$setTL');
+	UPDATE solar SET time='$riseTL' WHERE id=1;
+	UPDATE solar SET time='$setTL' WHERE id=2;
 EOF
 	# Log
 	echo "$(date +"%d/%m/%y %T")" darkpaper: Solar query stored - Sunrise: "$(sqlite3 "$darkdir"/solar.db 'SELECT time FROM solar WHERE id=1;' "")" Sunset: "$(sqlite3 "$darkdir"/solar.db 'SELECT time FROM solar WHERE id=2;' "")" >> ~/Library/Logs/io.github.peterwooley.darkpaper.log
@@ -93,6 +92,7 @@ launch() {
 	# Setup launch agent plists
 	/usr/libexec/PlistBuddy -c "Add :Label string io.github.peterwooley.darkpaper.sunrise" "$plistR" 1> /dev/null
 	/usr/libexec/PlistBuddy -c "Add :Program string ${darkdir}/darkpaper.sh" "$plistR"
+	/usr/libexec/PlistBuddy -c "Add :RunAtLoad bool true" "$plistR"
 	/usr/libexec/PlistBuddy -c "Add :Label string io.github.peterwooley.darkpaper.sunset" "$plistS" 1> /dev/null
 	/usr/libexec/PlistBuddy -c "Add :Program string ${darkdir}/darkpaper.sh" "$plistS"
 	# Load launch agents
@@ -104,19 +104,21 @@ launch() {
 editPlist() {
 	case $1 in
 		add)
+			# Unload launch agent
+			launchctl unload "$4"
 			# Add solar times to launch agent plist
 			/usr/libexec/PlistBuddy -c "Add :StartCalendarInterval:Hour integer $2" "$4"
 			/usr/libexec/PlistBuddy -c "Add :StartCalendarInterval:Minute integer $3" "$4"
-			# Reload launch agent
-			launchctl unload "$4"
+			# Load launch agent
 			launchctl load "$4"
 			;;
 		update)
+			# Unload launch agent
+			launchctl unload "$4"
 			# Update launch agent plist solar times
 			/usr/libexec/PlistBuddy -c "Set :StartCalendarInterval:Hour $2" "$4"
 			/usr/libexec/PlistBuddy -c "Set :StartCalendarInterval:Minute $3" "$4"
-			# Reload launch agent
-			launchctl unload "$4"
+			# Load launch agent
 			launchctl load "$4"
 			;;
 	esac
@@ -129,7 +131,13 @@ unstl() {
 	launchctl unload "$plistS"
 	# Check if darkpaper files exist and move to Trash
 	if [ -d "$darkdir" ]; then
-		mv "$darkdir" ~/.Trash
+		if [ -d ~/.Trash/darkmode ]; then
+			mv "$darkdir" "$(dirname "$darkdir")"/darkpapere"$(date +%H%M%S)"
+			darkdird=$(echo "$(dirname "$darkdir")"/darkpaper*)
+			mv "$darkdird" ~/.Trash
+		else
+			mv "$darkdir" ~/.Trash
+		fi
 	fi
 	if [ -f "$plistR" ] || [ -f "$plistS" ]; then
 		mv "$plistR" ~/.Trash
