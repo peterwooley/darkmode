@@ -20,7 +20,7 @@ darkpaper() {
 
 			osascript -e '
       tell application "System Events"
-        tell current desktop
+        tell every desktop
           set picture to "~/Pictures/sunrise-wallpaper.jpg"
         end tell
       end tell
@@ -48,7 +48,7 @@ darkpaper() {
 			# Set sunset wallpaper
 			osascript -e '
       tell application "System Events"
-        tell current desktop
+        tell every desktop
           set picture to "~/Pictures/sunset-wallpaper.jpg"
         end tell
       end tell
