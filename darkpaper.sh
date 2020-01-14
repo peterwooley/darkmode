@@ -68,8 +68,8 @@ darkpaper() {
 # Solar query
 solar() {
 	# Get Night Shift solar times (UTC)
-	riseT=$(/usr/bin/corebrightnessdiag nightshift-internal | grep nextSunrise | cut -d \" -f2)
-	setT=$(/usr/bin/corebrightnessdiag nightshift-internal | grep nextSunset | cut -d \" -f2)
+	riseT=$(/usr/libexec/corebrightnessdiag nightshift-internal | grep nextSunrise | cut -d \" -f2)
+	setT=$(/usr/libexec/corebrightnessdiag nightshift-internal | grep nextSunset | cut -d \" -f2)
 	# Convert to local time
 	riseTL=$(date -jf "%Y-%m-%d %H:%M:%S %z" "$riseT" +"%H:%M")
 	setTL=$(date -jf "%Y-%m-%d %H:%M:%S %z" "$setT" +"%H:%M")
